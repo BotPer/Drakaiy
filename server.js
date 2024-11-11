@@ -1,6 +1,6 @@
 const express = require('express');
 const path = require('path');
-const DarkAI = require('./darkai'); // Assurez-vous que le nom du fichier est correct
+const DarkAI = require('./DarkAI'); // Assurez-vous que le nom du fichier est correct
 const app = express();
 const PORT = process.env.PORT || 3000;
 
