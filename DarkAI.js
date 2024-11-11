@@ -2,59 +2,67 @@ const fetch = require('node-fetch'); // Assurez-vous d'avoir importé fetch
 
 class DarkAI {
   constructor() {
-    this.url = "https://doanything.ai/api/chat";
+    this.url = "https://replicate.com/api/models";
     this.headers = {
+      "Accept": "application/json",
       "Content-Type": "application/json",
-      "Accept": "*/*",
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
-      "Origin": "https://doanything.ai",
-      "Sec-Fetch-Site": "same-origin",
-      "Sec-Fetch-Mode": "cors",
-      "Sec-Fetch-Dest": "empty",
-      "Accept-Language": "en-US,en;q=0.9"
     };
   }
 
-  async fetchResponse(query) {
-    const payload = {
-      model: {
-        id: "gpt-3.5-turbo-0613",
-        name: "GPT-3.5",
-        maxLength: 12000,
-        tokenLimit: 4000
+  async fetchResponse(model = "gpt-3.5-turbo", chat, options) { // Ajout du modèle par défaut ici
+    const prompt = chat.map(msg => msg.text).join("\n");
+
+    const data = {
+      stream: true,
+      input: {
+        prompt: prompt,
+        max_tokens: model.includes("meta-llama-3") ? 512 : null, // respected by meta-llama-3
+        max_new_tokens: model.includes("mixtral") ? 1024 : null, // respected by mixtral-8x7b
+        temperature: options.temperature,
       },
-      messages: [{ role: "user", content: query }],
-      prompt: "You are a smart, responsive AI assistant...",
-      temperature: 0.7
     };
 
     try {
-      const response = await fetch(this.url, {
+      const response = await fetch(`${this.url}/${model}/predictions`, {
         method: 'POST',
         headers: this.headers,
-        body: JSON.stringify(payload)
+        body: JSON.stringify(data),
       });
 
-      const responseText = await response.text();
+      const responseJson = await response.json();
+      const streamUrl = responseJson.urls.stream;
 
-      try {
-        // Vérifie si la réponse peut être analysée en JSON
-        const jsonResponse = JSON.parse(responseText);
-        return jsonResponse.text || "No message in JSON response";
-      } catch {
-        // Si ce n'est pas du JSON, retourne le texte brut
-        return responseText;
+      const streamResponse = await fetch(streamUrl, {
+        method: 'GET',
+        headers: { "Accept": "text/event-stream", "Content-Type": "application/json" },
+      });
+
+      const reader = streamResponse.body;
+      let curr_event = "";
+      let result = "";
+
+      for await (let chunk of reader) {
+        let str = chunk.toString();
+        let lines = str.split("\n");
+        let is_only_line = true;
+
+        for (let line of lines) {
+          if (line.startsWith("event: ")) {
+            curr_event = line.substring(7);
+            if (curr_event === "done") return result;
+          } else if (line.startsWith("data: ") && curr_event === "output") {
+            let data = line.substring(6);
+            if (data.length === 0) data = "\n";
+            if (!is_only_line) data = "\n" + data;
+            is_only_line = false;
+            result += data;
+          }
+        }
       }
-
     } catch (error) {
-      console.error('Error fetching AI response:', error);
-      return "Error fetching AI response: " + error.message;
+      console.error('Error fetching Replicate response:', error);
+      return "Error fetching Replicate response: " + error.message;
     }
-  }
-
-  async createAsyncGenerator(model, messages) {
-    const message = messages[0].text;
-    return await this.fetchResponse(message);
   }
 }
 
