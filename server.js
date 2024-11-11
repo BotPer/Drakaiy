@@ -1,6 +1,6 @@
 const express = require('express');
 const path = require('path');
-const DarkAI = require('./DarkAI');
+const DarkAI = require('./darkai'); // Assurez-vous que le nom du fichier est correct
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -15,15 +15,19 @@ app.get('/', (req, res) => {
 
 const darkAI = new DarkAI();
 
+// Modèle par défaut
+const defaultModel = "gpt-3.5-turbo"; // Changez ce modèle par celui que vous voulez par défaut
+
 app.get('/api/chat', async (req, res) => {
-    const { model, message } = req.query;
+    const { model = defaultModel, message } = req.query; // Utilise un modèle par défaut si non fourni
 
     if (!message) {
         return res.status(400).json({ error: 'Message non fourni' });
     }
 
     try {
-        const result = await darkAI.createAsyncGenerator(model, [{ text: message }]);
+        // Utilise fetchResponse avec le modèle (par défaut ou fourni) et le message
+        const result = await darkAI.fetchResponse(model, [{ text: message }], { temperature: 0.7 });
         res.status(200).json({ response: result });
     } catch (error) {
         console.error('Erreur:', error);
